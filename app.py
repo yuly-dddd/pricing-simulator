@@ -1,9 +1,9 @@
 """
-KL 가격인상 시뮬레이션 v3
+KL 가격인상 시뮬레이션 v3 - 비밀번호 인증 버전
 유저가 7대 시나리오 변수를 각각 세분화 옵션으로 설정
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -11,6 +11,27 @@ import tempfile
 from datetime import datetime
 
 app = Flask(__name__)
+app.secret_key = 'kl-pricing-simulator-secret-key-2026'  # 보안을 위한 시크릿 키
+
+# ═══════════════════════════════════════
+# 🔒 비밀번호 설정 (원하는 비밀번호로 변경)
+# ═══════════════════════════════════════
+PASSWORD = "kl2026!"  # ← 여기를 원하는 비밀번호로 변경하세요
+
+
+# ═══════════════════════════════════════
+# 비밀번호 확인 데코레이터
+# ═══════════════════════════════════════
+def login_required(f):
+    """로그인 필요한 페이지에 적용"""
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 # ══════════════════════════════════════════
 # 7대 시나리오 변수 정의 + 프리셋 옵션
@@ -321,11 +342,41 @@ def build_excel(results_list):
     return wb
 
 
+# ═══════════════════════════════════════
+# 🔒 로그인 관련 라우트
+# ═══════════════════════════════════════
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """로그인 페이지"""
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == PASSWORD:
+            session['logged_in'] = True
+            return redirect(url_for('index'))
+        else:
+            return render_template("login.html", error="비밀번호가 틀렸습니다")
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    """로그아웃"""
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
+
+# ═══════════════════════════════════════
+# 기존 라우트 (로그인 필요)
+# ═══════════════════════════════════════
+
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 @app.route("/api/config")
+@login_required
 def get_config():
     return jsonify({
         "variables": SCENARIO_VARIABLES,
@@ -338,6 +389,7 @@ def get_config():
     })
 
 @app.route("/api/simulate", methods=["POST"])
+@login_required
 def api_simulate():
     data = request.json
     scenarios = data.get("scenarios", [])
@@ -350,6 +402,7 @@ def api_simulate():
     return jsonify(results)
 
 @app.route("/api/export", methods=["POST"])
+@login_required
 def export_excel():
     data = request.json
     scenarios = data.get("scenarios", [])
@@ -367,7 +420,8 @@ def export_excel():
 
 if __name__ == "__main__":
     print("="*50)
-    print("  KL 가격인상 시뮬레이션 v3")
+    print("  KL 가격인상 시뮬레이션 v3 🔒")
     print("  http://127.0.0.1:5001")
+    print(f"  비밀번호: {PASSWORD}")
     print("="*50)
     app.run(debug=True, port=5001)
